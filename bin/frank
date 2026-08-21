@@ -20,6 +20,8 @@ else
     INSTALL_DIR="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 fi
 
+COMPOSE_FILE="${INSTALL_DIR}/compose.yaml"
+
 # Colors & Formatting
 BOLD='\033[1m'
 DIM='\033[2m'
@@ -53,6 +55,10 @@ check_compose() {
     fi
 }
 
+dcompose() {
+    docker compose -f "${COMPOSE_FILE}" "$@"
+}
+
 cmd_help() {
     print_header
     echo -e "${BOLD}USAGE:${RESET}"
@@ -67,6 +73,12 @@ cmd_help() {
     echo -e "  ${CYAN}bash${RESET}, ${CYAN}sh${RESET}                Open interactive shell inside FrankenPHP"
     echo -e "  ${CYAN}composer${RESET} <args>       Run Composer commands inside the container"
     echo -e "  ${CYAN}open${RESET}                  Open Developer Hub dashboard in your browser\n"
+    echo -e "${BOLD}DATABASE COMMANDS:${RESET}"
+    echo -e "  ${BLUE}db:import${RESET} <file.sql> [db] Import SQL dump/migration into database (auto-creates db if needed)"
+    echo -e "  ${BLUE}db:export${RESET} [db] [out.sql]  Export/dump database to a SQL file"
+    echo -e "  ${BLUE}db:create${RESET} <db_name>       Create a new MySQL/MariaDB database"
+    echo -e "  ${BLUE}db:list${RESET}                   List all databases, tables count and sizes"
+    echo -e "  ${BLUE}db:cli${RESET} [db_name]          Open interactive MySQL terminal connected to database\n"
     echo -e "${BOLD}DEVELOPMENT & TOOLS:${RESET}"
     echo -e "  ${MAGENTA}new${RESET} <name> [type]     Scaffold a new project in /var/www (--laravel, --symfony, --flat)"
     echo -e "  ${MAGENTA}test-mercure${RESET}          Publish a real-time test event to Mercure SSE Hub"
@@ -77,8 +89,7 @@ cmd_help() {
 cmd_start() {
     check_compose
     echo -e "${CYAN}🚀 Starting FrankenPHP development environment...${RESET}"
-    cd "${INSTALL_DIR}"
-    docker compose up -d --build
+    dcompose up -d --build
     echo -e "${GREEN}✅ All services started successfully!${RESET}"
     echo -e "   🌐 Developer Hub:  ${CYAN}http://localhost${RESET}"
     echo -e "   🗄️ Adminer DB GUI: ${CYAN}http://localhost:8080/?server=database&username=dev&db=app_dev${RESET}"
@@ -89,25 +100,22 @@ cmd_start() {
 cmd_stop() {
     check_compose
     echo -e "${YELLOW}🛑 Stopping FrankenPHP environment...${RESET}"
-    cd "${INSTALL_DIR}"
-    docker compose down
+    dcompose down
     echo -e "${GREEN}✅ All services stopped.${RESET}"
 }
 
 cmd_restart() {
     check_compose
     echo -e "${CYAN}🔄 Restarting services...${RESET}"
-    cd "${INSTALL_DIR}"
-    docker compose restart
+    dcompose restart
     echo -e "${GREEN}✅ Restart complete.${RESET}"
 }
 
 cmd_status() {
     check_compose
     print_header
-    cd "${INSTALL_DIR}"
     echo -e "${BOLD}🐳 Docker Containers:${RESET}"
-    docker compose ps
+    dcompose ps
     echo ""
     echo -e "${BOLD}📁 Active Projects in ${INSTALL_DIR}:${RESET}"
     for dir in "${INSTALL_DIR}"/*/; do
@@ -116,6 +124,8 @@ cmd_status() {
             if [[ "$bname" != "bin" && "$bname" != "html" && "$bname" != ".github" && "$bname" != ".database" && "$bname" != "caddy_data" && "$bname" != "caddy_config" ]]; then
                 if [[ -f "${dir}public/index.php" ]]; then
                     echo -e "  🚀 ${BOLD}${bname}${RESET} -> ${CYAN}http://localhost/${bname}/${RESET} ${DIM}(MVC public/)${RESET}"
+                elif [[ -f "${dir}app/index.html" ]]; then
+                    echo -e "  ⚡ ${BOLD}${bname}${RESET} -> ${CYAN}http://localhost/${bname}/app/${RESET} ${DIM}(SPA app/)${RESET}"
                 elif [[ -f "${dir}index.php" ]]; then
                     echo -e "  📄 ${BOLD}${bname}${RESET} -> ${CYAN}http://localhost/${bname}/${RESET} ${DIM}(Flat PHP)${RESET}"
                 else
@@ -129,28 +139,108 @@ cmd_status() {
 
 cmd_logs() {
     check_compose
-    cd "${INSTALL_DIR}"
-    docker compose logs "${@:- -f frankenphp}"
+    dcompose logs "${@:- -f frankenphp}"
 }
 
 cmd_reload() {
     check_compose
     echo -e "${CYAN}🔄 Reloading Caddyfile configuration...${RESET}"
-    cd "${INSTALL_DIR}"
-    docker compose exec frankenphp frankenphp reload --config /etc/caddy/Caddyfile
+    dcompose exec frankenphp frankenphp reload --config /etc/caddy/Caddyfile
     echo -e "${GREEN}✅ Caddy configuration reloaded with zero downtime!${RESET}"
 }
 
 cmd_bash() {
     check_compose
-    cd "${INSTALL_DIR}"
-    docker compose exec frankenphp bash
+    dcompose exec frankenphp bash
 }
 
 cmd_composer() {
     check_compose
-    cd "${INSTALL_DIR}"
-    docker compose exec frankenphp composer "$@"
+    dcompose exec frankenphp composer "$@"
+}
+
+# --- DATABASE MANAGEMENT SUITE ---
+cmd_db_import() {
+    check_compose
+    local file="$1"
+    local db_name="${2:-app_dev}"
+
+    if [[ -z "$file" ]]; then
+        echo -e "${RED}❌ Usage: frank db:import <file.sql> [database_name]${RESET}"
+        exit 1
+    fi
+
+    if [[ "$file" != "-" && ! -f "$file" ]]; then
+        echo -e "${RED}❌ Error: SQL file not found at: ${file}${RESET}"
+        exit 1
+    fi
+
+    echo -e "${CYAN}📦 Ensuring database '${db_name}' exists...${RESET}"
+    dcompose exec -T database mariadb -u root -proot -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+    echo -e "${CYAN}🚀 Importing '${file}' into database '${db_name}'...${RESET}"
+    if [[ "$file" == "-" ]]; then
+        dcompose exec -T database mariadb -u root -proot "${db_name}"
+    else
+        dcompose exec -T database mariadb -u root -proot "${db_name}" < "$file"
+    fi
+
+    # Query table count
+    local tables
+    tables=$(dcompose exec -T database mariadb -u root -proot -N -s -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '${db_name}';")
+    echo -e "${GREEN}✅ Migration / Dump imported successfully into '${db_name}'!${RESET}"
+    echo -e "   📊 Total Tables in '${db_name}': ${BOLD}${tables}${RESET}"
+    echo -e "   🔗 Open in Adminer: ${CYAN}http://localhost:8080/?server=database&username=root&db=${db_name}${RESET}"
+}
+
+cmd_db_export() {
+    check_compose
+    local db_name="${1:-app_dev}"
+    local output_file="$2"
+
+    if [[ -n "$output_file" ]]; then
+        echo -e "${CYAN}📦 Exporting database '${db_name}' to '${output_file}'...${RESET}"
+        dcompose exec -T database mariadb-dump -u root -proot "${db_name}" > "$output_file"
+        echo -e "${GREEN}✅ Database '${db_name}' exported to ${output_file} ($(du -h "$output_file" | cut -f1))!${RESET}"
+    else
+        dcompose exec -T database mariadb-dump -u root -proot "${db_name}"
+    fi
+}
+
+cmd_db_create() {
+    check_compose
+    local db_name="$1"
+    if [[ -z "$db_name" ]]; then
+        echo -e "${RED}❌ Usage: frank db:create <database_name>${RESET}"
+        exit 1
+    fi
+
+    echo -e "${CYAN}✨ Creating database '${db_name}'...${RESET}"
+    dcompose exec -T database mariadb -u root -proot -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    echo -e "${GREEN}✅ Database '${db_name}' created successfully!${RESET}"
+}
+
+cmd_db_list() {
+    check_compose
+    print_header
+    echo -e "${BOLD}🗄️ MySQL / MariaDB Databases on Container (database:3306):${RESET}\n"
+    dcompose exec -T database mariadb -u root -proot -e "
+        SELECT 
+            table_schema AS 'Database', 
+            COUNT(table_name) AS 'Tables', 
+            CONCAT(ROUND(SUM(data_length + index_length) / 1024 / 1024, 2), ' MB') AS 'Size'
+        FROM information_schema.tables 
+        WHERE table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+        GROUP BY table_schema;
+    "
+    echo ""
+}
+
+cmd_db_cli() {
+    check_compose
+    local db_name="${1:-app_dev}"
+    echo -e "${CYAN}🔌 Connecting to database '${db_name}'...${RESET}"
+    dcompose exec database mariadb -u root -proot "${db_name}"
 }
 
 cmd_open() {
@@ -202,12 +292,10 @@ cmd_new() {
 
     case "$type" in
         --laravel)
-            cd "${INSTALL_DIR}"
-            docker compose exec frankenphp composer create-project laravel/laravel "${name}"
+            dcompose exec frankenphp composer create-project laravel/laravel "${name}"
             ;;
         --symfony)
-            cd "${INSTALL_DIR}"
-            docker compose exec frankenphp composer create-project symfony/skeleton "${name}"
+            dcompose exec frankenphp composer create-project symfony/skeleton "${name}"
             ;;
         --flat|*)
             mkdir -p "$target_dir"
@@ -271,8 +359,8 @@ cmd_doctor() {
 
     # 4. Database Server
     echo -n "  • MariaDB Database (database:3306): "
-    if docker compose exec -T database mariadb-admin ping -u root -proot &> /dev/null; then
-        echo -e "${GREEN}ONLINE (DB: app_dev)${RESET}"
+    if dcompose exec -T database mariadb-admin ping -u root -proot &> /dev/null; then
+        echo -e "${GREEN}ONLINE${RESET}"
     else
         echo -e "${YELLOW}STANDBY / INITIALIZING${RESET}"
     fi
@@ -309,7 +397,7 @@ cmd_uninstall() {
     read -p "Are you sure? (y/N): " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        cd "${INSTALL_DIR}" && docker compose down
+        dcompose down
         rm -f /usr/local/bin/frank /usr/local/bin/frankenv /usr/local/bin/fphp
         echo -e "${GREEN}✅ Uninstalled successfully.${RESET}"
     else
@@ -344,6 +432,25 @@ case "${1:-help}" in
     composer)
         shift
         cmd_composer "$@"
+        ;;
+    db:import|db:migrate|db:exec)
+        shift
+        cmd_db_import "$@"
+        ;;
+    db:export|db:dump)
+        shift
+        cmd_db_export "$@"
+        ;;
+    db:create)
+        shift
+        cmd_db_create "$@"
+        ;;
+    db:list)
+        cmd_db_list
+        ;;
+    db:cli|mysql)
+        shift
+        cmd_db_cli "$@"
         ;;
     new)
         shift

@@ -18,12 +18,16 @@ function getProjects(string $baseDir): array {
         $fullPath = $baseDir . DIRECTORY_SEPARATOR . $entry;
         if (is_dir($fullPath)) {
             $hasPublic = file_exists($fullPath . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'index.php');
-            $hasIndex = file_exists($fullPath . DIRECTORY_SEPARATOR . 'index.php');
+            $hasAppSpa = file_exists($fullPath . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'index.html');
+            $hasIndex = file_exists($fullPath . DIRECTORY_SEPARATOR . 'index.php') || file_exists($fullPath . DIRECTORY_SEPARATOR . 'index.html');
             $type = 'directory';
             $url = '/' . $entry . '/';
             
             if ($hasPublic) {
                 $type = 'mvc';
+            } elseif ($hasAppSpa) {
+                $type = 'spa';
+                $url = '/' . $entry . '/app/';
             } elseif ($hasIndex) {
                 $type = 'flat';
             }
@@ -46,7 +50,8 @@ function getProjects(string $baseDir): array {
 // Database Health Check
 $dbStatus = false;
 $dbVersion = 'N/A';
-$dbUserCount = 0;
+$dbCount = 0;
+$dbList = [];
 try {
     $host = getenv('DB_HOST') ?: 'database';
     $port = getenv('DB_PORT') ?: '3306';
@@ -60,7 +65,12 @@ try {
     ]);
     $dbStatus = true;
     $dbVersion = $pdo->query("SELECT VERSION()")->fetchColumn();
-    $dbUserCount = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
+    $dbList = $pdo->query("
+        SELECT table_schema as db_name, COUNT(table_name) as table_count 
+        FROM information_schema.tables 
+        WHERE table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+        GROUP BY table_schema
+    ")->fetchAll(PDO::FETCH_ASSOC);
 } catch (\Throwable $e) {
     $dbStatus = false;
 }
@@ -329,6 +339,12 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
             border: 1px solid rgba(99, 102, 241, 0.4);
         }
 
+        .tag-spa {
+            background-color: rgba(236, 72, 153, 0.2);
+            color: #f472b6;
+            border: 1px solid rgba(236, 72, 153, 0.4);
+        }
+
         .tag-flat {
             background-color: rgba(56, 189, 248, 0.2);
             color: #7dd3fc;
@@ -356,62 +372,6 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
         .cred-row { display: flex; justify-content: space-between; }
         .cred-key { color: var(--text-muted); }
         .cred-val { color: #38bdf8; font-weight: 600; }
-
-        /* Mercure Live Widget */
-        .mercure-box {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .form-group {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .input {
-            flex: 1;
-            padding: 0.6rem 0.9rem;
-            background-color: var(--surface-card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            color: var(--text);
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.875rem;
-            outline: none;
-        }
-
-        .input:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 2px var(--primary-glow);
-        }
-
-        .live-log {
-            background-color: #05070d;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 0.85rem;
-            height: 180px;
-            overflow-y: auto;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8125rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.4rem;
-        }
-
-        .log-entry {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .log-time {
-            color: var(--text-muted);
-        }
-
-        .log-msg {
-            color: #38bdf8;
-        }
 
         /* Diagnostics */
         .diag-grid {
@@ -488,7 +448,7 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
                 <div class="badge badge-success">
                     <span class="dot"></span> Server Active (PHP <?= PHP_VERSION ?>)
                 </div>
-                <a href="http://localhost:8080/?server=database&username=dev&db=app_dev" target="_blank" class="btn btn-primary">🗄️ Adminer DB</a>
+                <a href="http://localhost:8080/?server=database&username=root&db=fsa_db" target="_blank" class="btn btn-primary">🗄️ Adminer DB</a>
                 <a href="/mercure-demo.html" target="_blank" class="btn">⚡ Mercure Hub</a>
                 <a href="/demo-db/" class="btn">📦 DB Demo App</a>
             </div>
@@ -509,14 +469,13 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
                     <?php if (empty($projects)): ?>
                         <div class="empty-state">
                             <p>No subdirectories found in <code>/var/www</code> yet.</p>
-                            <p style="font-size: 0.8rem; margin-top: 0.5rem;">Drop any project folder (e.g. <code>/var/www/my-app</code>) and it will appear here automatically!</p>
                         </div>
                     <?php else: ?>
                         <?php foreach ($projects as $p): ?>
                             <a href="<?= htmlspecialchars($p['url']) ?>" class="project-item">
                                 <div class="project-info">
                                     <div class="project-icon">
-                                        <?= $p['type'] === 'mvc' ? '🚀' : ($p['type'] === 'flat' ? '📄' : '📁') ?>
+                                        <?= $p['type'] === 'mvc' ? '🚀' : ($p['type'] === 'spa' ? '⚡' : ($p['type'] === 'flat' ? '📄' : '📁')) ?>
                                     </div>
                                     <div class="project-meta">
                                         <h3><?= htmlspecialchars($p['name']) ?></h3>
@@ -524,7 +483,7 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
                                     </div>
                                 </div>
                                 <span class="type-tag tag-<?= $p['type'] ?>">
-                                    <?= $p['type'] === 'mvc' ? 'MVC (public/)' : ($p['type'] === 'flat' ? 'Flat PHP' : 'Folder') ?>
+                                    <?= $p['type'] === 'mvc' ? 'MVC (public/)' : ($p['type'] === 'spa' ? 'SPA (app/)' : ($p['type'] === 'flat' ? 'Flat PHP' : 'Folder')) ?>
                                 </span>
                             </a>
                         <?php endforeach; ?>
@@ -537,7 +496,7 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
                 <div class="card-header">
                     <div class="card-title">
                         <span>🗄️</span>
-                        <span>Database (MariaDB 11.4 / MySQL)</span>
+                        <span>Databases (MariaDB 11.4 / MySQL)</span>
                     </div>
                     <span class="badge" style="background: <?= $dbStatus ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)' ?>; color: <?= $dbStatus ? '#34d399' : '#f87171' ?>;">
                         <?= $dbStatus ? '● Connected' : '● Disconnected' ?>
@@ -547,14 +506,13 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
                 <div class="cred-box">
                     <div class="cred-row"><span class="cred-key">Server (Inside Docker):</span> <span class="cred-val">database:3306</span></div>
                     <div class="cred-row"><span class="cred-key">Host (From PC/DBeaver):</span> <span class="cred-val">localhost:3306</span></div>
-                    <div class="cred-row"><span class="cred-key">Database:</span> <span class="cred-val">app_dev</span></div>
-                    <div class="cred-row"><span class="cred-key">User / Password:</span> <span class="cred-val">dev / secret</span></div>
-                    <div class="cred-row"><span class="cred-key">Root Password:</span> <span class="cred-val">root</span></div>
+                    <div class="cred-row"><span class="cred-key">Databases Active:</span> <span class="cred-val"><?= implode(', ', array_column($dbList, 'db_name')) ?></span></div>
+                    <div class="cred-row"><span class="cred-key">User / Password:</span> <span class="cred-val">root / root</span></div>
                 </div>
 
                 <div style="display: flex; gap: 0.75rem;">
-                    <a href="http://localhost:8080/?server=database&username=dev&db=app_dev" target="_blank" class="btn btn-primary" style="flex: 1; justify-content: center;">
-                        ⚡ Launch Adminer GUI
+                    <a href="http://localhost:8080/?server=database&username=root&db=fsa_db" target="_blank" class="btn btn-primary" style="flex: 1; justify-content: center;">
+                        ⚡ Open fsa_db in Adminer
                     </a>
                     <a href="/demo-db/" class="btn" style="flex: 1; justify-content: center;">
                         📦 Open DB Demo App
