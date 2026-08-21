@@ -1,0 +1,66 @@
+name: FrankenPHP & CLI CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  lint-and-validate:
+    name: Lint & Syntax Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Validate Shell Scripts
+        run: |
+          bash -n install.sh
+          bash -n bin/frank
+
+      - name: Setup PHP for Linting
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, pdo, json
+
+      - name: Syntax Check PHP Files
+        run: |
+          find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
+
+      - name: Validate Caddyfile Syntax
+        run: |
+          docker run --rm -v $(pwd)/Caddyfile:/etc/caddy/Caddyfile dunglas/frankenphp:latest frankenphp validate --config /etc/caddy/Caddyfile
+
+  build-and-test:
+    name: Build & CLI Smoke Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-validate
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install and Boot Environment
+        run: |
+          cp .env.example .env
+          ./bin/frank start
+          sleep 5
+
+      - name: Test Health Endpoint
+        run: |
+          curl -f http://localhost/healthz || exit 1
+
+      - name: Run CLI Doctor
+        run: |
+          ./bin/frank doctor
+
+      - name: Test Mercure Publishing via CLI
+        run: |
+          ./bin/frank test-mercure
+
+      - name: Clean Up
+        run: |
+          ./bin/frank stop

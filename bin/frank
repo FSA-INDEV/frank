@@ -1,0 +1,363 @@
+#!/usr/bin/env bash
+# ==============================================================================
+#  🐘 frank - FrankenPHP Development Server CLI Manager
+# ==============================================================================
+
+set -eo pipefail
+
+# Find installation root directory
+if [[ -n "${FRANK_HOME}" && -d "${FRANK_HOME}" ]]; then
+    INSTALL_DIR="${FRANK_HOME}"
+elif [[ -f "/var/www/compose.yaml" ]]; then
+    INSTALL_DIR="/var/www"
+else
+    SOURCE="${BASH_SOURCE[0]}"
+    while [ -h "$SOURCE" ]; do
+        DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+        SOURCE="$(readlink "$SOURCE")"
+        [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+    done
+    INSTALL_DIR="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+fi
+
+# Colors & Formatting
+BOLD='\033[1m'
+DIM='\033[2m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+RESET='\033[0m'
+
+print_header() {
+    echo -e "${CYAN}${BOLD}"
+    echo "  ███████╗██████╗  █████╗ ███╗   ██╗██╗  ██╗"
+    echo "  ██╔════╝██╔══██╗██╔══██╗████╗  ██║██║ ██╔╝"
+    echo "  █████╗  ██████╔╝███████║██╔██╗ ██║█████╔╝ "
+    echo "  ██╔══╝  ██╔══██╗██╔══██║██║╚██╗██║██╔═██╗ "
+    echo "  ██║     ██║  ██║██║  ██║██║ ╚████║██║  ██╗"
+    echo "  ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝"
+    echo -e "  ${MAGENTA}FrankenPHP Drop-In Dev Server & Mercure Hub${RESET}\n"
+}
+
+check_compose() {
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}❌ Error: Docker is not installed or not in PATH.${RESET}"
+        exit 1
+    fi
+    if ! docker compose version &> /dev/null; then
+        echo -e "${RED}❌ Error: Docker Compose is not installed.${RESET}"
+        exit 1
+    fi
+}
+
+cmd_help() {
+    print_header
+    echo -e "${BOLD}USAGE:${RESET}"
+    echo -e "  frank <command> [arguments]\n"
+    echo -e "${BOLD}CORE COMMANDS:${RESET}"
+    echo -e "  ${GREEN}start${RESET}, ${GREEN}up${RESET}              Start all services in background"
+    echo -e "  ${YELLOW}stop${RESET}, ${YELLOW}down${RESET}            Stop all running services"
+    echo -e "  ${CYAN}restart${RESET}               Restart all containers"
+    echo -e "  ${CYAN}status${RESET}                Show status of services and open ports"
+    echo -e "  ${CYAN}logs${RESET} [-f]             View/follow live server logs"
+    echo -e "  ${CYAN}reload${RESET}                Hot-reload Caddyfile configuration without downtime"
+    echo -e "  ${CYAN}bash${RESET}, ${CYAN}sh${RESET}                Open interactive shell inside FrankenPHP"
+    echo -e "  ${CYAN}composer${RESET} <args>       Run Composer commands inside the container"
+    echo -e "  ${CYAN}open${RESET}                  Open Developer Hub dashboard in your browser\n"
+    echo -e "${BOLD}DEVELOPMENT & TOOLS:${RESET}"
+    echo -e "  ${MAGENTA}new${RESET} <name> [type]     Scaffold a new project in /var/www (--laravel, --symfony, --flat)"
+    echo -e "  ${MAGENTA}test-mercure${RESET}          Publish a real-time test event to Mercure SSE Hub"
+    echo -e "  ${MAGENTA}doctor${RESET}                Run environment health & diagnostics check"
+    echo -e "  ${RED}uninstall${RESET}             Stop services and remove CLI symlink\n"
+}
+
+cmd_start() {
+    check_compose
+    echo -e "${CYAN}🚀 Starting FrankenPHP development environment...${RESET}"
+    cd "${INSTALL_DIR}"
+    docker compose up -d --build
+    echo -e "${GREEN}✅ All services started successfully!${RESET}"
+    echo -e "   🌐 Developer Hub:  ${CYAN}http://localhost${RESET}"
+    echo -e "   🗄️ Adminer DB:      ${CYAN}http://localhost:8080${RESET}"
+    echo -e "   ⚡ Mercure Hub:     ${CYAN}http://localhost/mercure-demo.html${RESET}"
+}
+
+cmd_stop() {
+    check_compose
+    echo -e "${YELLOW}🛑 Stopping FrankenPHP environment...${RESET}"
+    cd "${INSTALL_DIR}"
+    docker compose down
+    echo -e "${GREEN}✅ All services stopped.${RESET}"
+}
+
+cmd_restart() {
+    check_compose
+    echo -e "${CYAN}🔄 Restarting services...${RESET}"
+    cd "${INSTALL_DIR}"
+    docker compose restart
+    echo -e "${GREEN}✅ Restart complete.${RESET}"
+}
+
+cmd_status() {
+    check_compose
+    print_header
+    cd "${INSTALL_DIR}"
+    echo -e "${BOLD}🐳 Docker Containers:${RESET}"
+    docker compose ps
+    echo ""
+    echo -e "${BOLD}📁 Active Projects in ${INSTALL_DIR}:${RESET}"
+    for dir in "${INSTALL_DIR}"/*/; do
+        if [[ -d "$dir" ]]; then
+            bname=$(basename "$dir")
+            if [[ "$bname" != "bin" && "$bname" != "html" && "$bname" != ".github" && "$bname" != "caddy_data" && "$bname" != "caddy_config" ]]; then
+                if [[ -f "${dir}public/index.php" ]]; then
+                    echo -e "  🚀 ${BOLD}${bname}${RESET} -> ${CYAN}http://localhost/${bname}/${RESET} ${DIM}(MVC public/)${RESET}"
+                elif [[ -f "${dir}index.php" ]]; then
+                    echo -e "  📄 ${BOLD}${bname}${RESET} -> ${CYAN}http://localhost/${bname}/${RESET} ${DIM}(Flat PHP)${RESET}"
+                else
+                    echo -e "  📁 ${BOLD}${bname}${RESET} -> ${CYAN}http://localhost/${bname}/${RESET}"
+                fi
+            fi
+        fi
+    done
+    echo ""
+}
+
+cmd_logs() {
+    check_compose
+    cd "${INSTALL_DIR}"
+    docker compose logs "${@:- -f frankenphp}"
+}
+
+cmd_reload() {
+    check_compose
+    echo -e "${CYAN}🔄 Reloading Caddyfile configuration...${RESET}"
+    cd "${INSTALL_DIR}"
+    docker compose exec frankenphp frankenphp reload --config /etc/caddy/Caddyfile
+    echo -e "${GREEN}✅ Caddy configuration reloaded with zero downtime!${RESET}"
+}
+
+cmd_bash() {
+    check_compose
+    cd "${INSTALL_DIR}"
+    docker compose exec frankenphp bash
+}
+
+cmd_composer() {
+    check_compose
+    cd "${INSTALL_DIR}"
+    docker compose exec frankenphp composer "$@"
+}
+
+cmd_open() {
+    local url="http://localhost"
+    if command -v xdg-open &> /dev/null; then
+        xdg-open "$url"
+    elif command -v open &> /dev/null; then
+        open "$url"
+    else
+        echo -e "Please open ${CYAN}${url}${RESET} in your browser."
+    fi
+}
+
+cmd_test_mercure() {
+    echo -e "${CYAN}⚡ Publishing test event to Mercure Hub...${RESET}"
+    local msg="CLI Test at $(date +'%Y-%m-%d %H:%M:%S') 🐘"
+    local res
+    res=$(curl -s -X POST http://localhost/mercure-test.php \
+      -d "topic=https://example.com/notifications&message=${msg}" || true)
+
+    if echo "$res" | grep -q '"success":true'; then
+        local id
+        id=$(echo "$res" | grep -o '"id":"[^"]*' | cut -d'"' -f4)
+        echo -e "${GREEN}✅ Mercure Event published successfully!${RESET}"
+        echo -e "   Topic:    ${CYAN}https://example.com/notifications${RESET}"
+        echo -e "   Payload:  ${CYAN}${msg}${RESET}"
+        echo -e "   Event ID: ${DIM}${id}${RESET}"
+    else
+        echo -e "${RED}❌ Failed to publish Mercure event:${RESET} ${res}"
+    fi
+}
+
+cmd_new() {
+    local name="$1"
+    local type="${2:---flat}"
+    
+    if [[ -z "$name" ]]; then
+        echo -e "${RED}❌ Usage: frank new <project-name> [--laravel | --symfony | --flat]${RESET}"
+        exit 1
+    fi
+
+    local target_dir="${INSTALL_DIR}/${name}"
+    if [[ -d "$target_dir" ]]; then
+        echo -e "${RED}❌ Error: Directory '${name}' already exists in ${INSTALL_DIR}.${RESET}"
+        exit 1
+    fi
+
+    echo -e "${CYAN}✨ Creating new project '${name}' (${type})...${RESET}"
+
+    case "$type" in
+        --laravel)
+            cd "${INSTALL_DIR}"
+            docker compose exec frankenphp composer create-project laravel/laravel "${name}"
+            ;;
+        --symfony)
+            cd "${INSTALL_DIR}"
+            docker compose exec frankenphp composer create-project symfony/skeleton "${name}"
+            ;;
+        --flat|*)
+            mkdir -p "$target_dir"
+            cat << 'PHEOF' > "${target_dir}/index.php"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Welcome to <?php echo basename(__DIR__); ?></title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #0b0f19; color: #f8fafc; padding: 3rem; text-align: center; }
+        .card { max-width: 600px; margin: 0 auto; background: #111827; padding: 2.5rem; border-radius: 16px; border: 1px solid #374151; }
+        h1 { color: #38bdf8; }
+        p { color: #9ca3af; margin: 1rem 0; }
+        a { color: #818cf8; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🐘 Welcome to <?php echo basename(__DIR__); ?></h1>
+        <p>Your new FrankenPHP project is up and running!</p>
+        <p>PHP Version: <strong><?php echo PHP_VERSION; ?></strong></p>
+        <p><a href="/">&larr; Back to Developer Hub</a></p>
+    </div>
+</body>
+</html>
+PHEOF
+            ;;
+    esac
+
+    echo -e "${GREEN}✅ Project '${name}' created successfully!${RESET}"
+    echo -e "   👉 Access URL: ${CYAN}http://localhost/${name}/${RESET}"
+}
+
+cmd_doctor() {
+    print_header
+    echo -e "${BOLD}🩺 Running FrankenPHP Environment Diagnostics...${RESET}\n"
+
+    # 1. Docker
+    echo -n "  • Docker Engine: "
+    if command -v docker &> /dev/null && docker info &> /dev/null; then
+        echo -e "${GREEN}OK ($(docker --version | cut -d',' -f1))${RESET}"
+    else
+        echo -e "${RED}FAILED (Docker not running)${RESET}"
+    fi
+
+    # 2. Compose
+    echo -n "  • Docker Compose: "
+    if docker compose version &> /dev/null; then
+        echo -e "${GREEN}OK ($(docker compose version | head -n1))${RESET}"
+    else
+        echo -e "${RED}FAILED${RESET}"
+    fi
+
+    # 3. HTTP Server
+    echo -n "  • FrankenPHP Server (Port 80): "
+    if curl -s -f http://localhost/healthz &> /dev/null; then
+        echo -e "${GREEN}ONLINE (Health: OK)${RESET}"
+    else
+        echo -e "${RED}OFFLINE (Not responding on :80)${RESET}"
+    fi
+
+    # 4. Mercure Hub
+    echo -n "  • Mercure Real-Time Hub: "
+    if curl -s -I http://localhost/.well-known/mercure | grep -q "400\|200"; then
+        echo -e "${GREEN}ACTIVE${RESET}"
+    else
+        echo -e "${RED}INACTIVE${RESET}"
+    fi
+
+    # 5. Adminer DB Manager
+    echo -n "  • Adminer GUI (Port 8080): "
+    if curl -s -f -I http://localhost:8080 &> /dev/null; then
+        echo -e "${GREEN}ONLINE${RESET}"
+    else
+        echo -e "${YELLOW}STANDBY${RESET}"
+    fi
+
+    # 6. Permissions
+    echo -n "  • Directory Permissions (${INSTALL_DIR}): "
+    if [[ -w "${INSTALL_DIR}" ]]; then
+        echo -e "${GREEN}WRITABLE${RESET}"
+    else
+        echo -e "${YELLOW}READ-ONLY (Run chown for user)${RESET}"
+    fi
+
+    echo -e "\n${BOLD}Diagnostics Complete!${RESET}\n"
+}
+
+cmd_uninstall() {
+    echo -e "${YELLOW}⚠️ This will stop FrankenPHP containers and remove the 'frank' CLI binary.${RESET}"
+    read -p "Are you sure? (y/N): " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        cd "${INSTALL_DIR}" && docker compose down
+        rm -f /usr/local/bin/frank /usr/local/bin/frankenv /usr/local/bin/fphp
+        echo -e "${GREEN}✅ Uninstalled successfully.${RESET}"
+    else
+        echo "Aborted."
+    fi
+}
+
+# Command Router
+case "${1:-help}" in
+    start|up)
+        cmd_start
+        ;;
+    stop|down)
+        cmd_stop
+        ;;
+    restart)
+        cmd_restart
+        ;;
+    status|ps)
+        cmd_status
+        ;;
+    logs)
+        shift
+        cmd_logs "$@"
+        ;;
+    reload)
+        cmd_reload
+        ;;
+    bash|sh)
+        cmd_bash
+        ;;
+    composer)
+        shift
+        cmd_composer "$@"
+        ;;
+    new)
+        shift
+        cmd_new "$@"
+        ;;
+    doctor)
+        cmd_doctor
+        ;;
+    test-mercure)
+        cmd_test_mercure
+        ;;
+    open)
+        cmd_open
+        ;;
+    uninstall)
+        cmd_uninstall
+        ;;
+    help|--help|-h)
+        cmd_help
+        ;;
+    *)
+        echo -e "${RED}Unknown command: $1${RESET}"
+        cmd_help
+        exit 1
+        ;;
+esac

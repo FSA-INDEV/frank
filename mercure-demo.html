@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mercure Real-Time Hub Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #090d16;
+            --surface: #0f172a;
+            --surface-card: #1e293b;
+            --surface-hover: #334155;
+            --border: #334155;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #38bdf8;
+            --primary-glow: rgba(56, 189, 248, 0.2);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 2rem 1.5rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+        }
+
+        .logo-icon {
+            font-size: 2rem;
+            background: linear-gradient(135deg, #0284c7, #6366f1);
+            padding: 0.4rem 0.7rem;
+            border-radius: 12px;
+        }
+
+        .brand h1 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid var(--border);
+            background-color: var(--surface-card);
+            color: var(--text);
+        }
+
+        .btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #0284c7, #4f46e5);
+            border: none;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+            color: #fff;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        @media (max-width: 850px) {
+            .grid-2 { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.5rem;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.2rem;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+            font-weight: 600;
+        }
+
+        .input, .textarea {
+            width: 100%;
+            padding: 0.65rem 0.9rem;
+            background-color: var(--surface-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        .input:focus, .textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px var(--primary-glow);
+        }
+
+        .textarea {
+            height: 90px;
+            resize: vertical;
+        }
+
+        .stream-box {
+            background-color: #030712;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            height: 380px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
+        .event-card {
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .event-payload {
+            color: #38bdf8;
+            word-break: break-all;
+            background: var(--surface-card);
+            padding: 0.4rem 0.6rem;
+            border-radius: 6px;
+        }
+
+        .code-tabs {
+            margin-top: 1.5rem;
+        }
+
+        pre {
+            background: #030712;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: #7dd3fc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="brand">
+                <div class="logo-icon">⚡</div>
+                <div>
+                    <h1>Mercure Real-Time Hub Console</h1>
+                    <p>Live Server-Sent Events (SSE) stream & event publisher</p>
+                </div>
+            </div>
+            <div>
+                <a href="/" class="btn">&larr; Back to Developer Hub</a>
+            </div>
+        </header>
+
+        <div class="grid-2">
+            <!-- Left Column: Controls & Publisher -->
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <!-- Subscription Setup -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">📡 <span>Subscriber Connection</span></div>
+                        <span id="sub-status" class="badge badge-danger">Disconnected</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Topic URI to Subscribe</label>
+                        <input id="sub-topic" class="input" type="text" value="https://example.com/notifications">
+                    </div>
+
+                    <div style="display: flex; gap: 0.75rem;">
+                        <button id="sub-toggle-btn" class="btn btn-primary" onclick="toggleSubscription()">Connect to Stream</button>
+                        <button class="btn" onclick="clearStream()">Clear Feed</button>
+                    </div>
+                </div>
+
+                <!-- Event Publisher -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">📤 <span>Publish Real-Time Event</span></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Target Topic</label>
+                        <input id="pub-topic" class="input" type="text" value="https://example.com/notifications">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Payload Data (Text or JSON)</label>
+                        <textarea id="pub-data" class="textarea">{"title": "Order Placed", "status": "processing", "timestamp": "2026-08-21"}</textarea>
+                    </div>
+
+                    <button id="pub-btn" class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="publishEvent()">
+                        ⚡ Dispatch Event to Hub
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Column: Live Event Stream Feed -->
+            <div class="card" style="display: flex; flex-direction: column;">
+                <div class="card-header">
+                    <div class="card-title">🔴 <span>Live Event Stream</span></div>
+                    <span id="event-count" class="badge" style="background: var(--surface-card);">0 Events</span>
+                </div>
+
+                <div class="stream-box" id="stream-feed">
+                    <div style="color: var(--text-muted); text-align: center; margin-top: 5rem;">
+                        Click <strong>Connect to Stream</strong> to begin listening for real-time events.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Code Snippet Reference -->
+        <div class="card code-tabs">
+            <div class="card-header">
+                <div class="card-title">💻 <span>Integration Quick Reference</span></div>
+            </div>
+            <pre><code>// 1. JavaScript Frontend (Browser EventSource)
+const eventSource = new EventSource('/.well-known/mercure?topic=' + encodeURIComponent('https://example.com/notifications'));
+eventSource.onmessage = (e) => {
+    console.log('Real-time message received:', e.data);
+};
+
+// 2. PHP Backend (Publishing via POST)
+// Use the built-in helper in /var/www/mercure-test.php or post directly with your publisher JWT:
+$response = file_get_contents('http://localhost/mercure-test.php', false, stream_context_create([
+    'http' => [
+        'method'  => 'POST',
+        'header'  => 'Content-Type: application/x-www-form-urlencoded',
+        'content' => http_build_query(['topic' => 'https://example.com/notifications', 'message' => 'Hello Realtime!'])
+    ]
+]));</code></pre>
+        </div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let eventCounter = 0;
+
+        function updateStatus(connected) {
+            const badge = document.getElementById('sub-status');
+            const btn = document.getElementById('sub-toggle-btn');
+            if (connected) {
+                badge.className = 'badge badge-success';
+                badge.innerText = 'Connected';
+                btn.innerText = 'Disconnect';
+                btn.style.background = '#dc2626';
+            } else {
+                badge.className = 'badge badge-danger';
+                badge.innerText = 'Disconnected';
+                btn.innerText = 'Connect to Stream';
+                btn.style.background = '';
+            }
+        }
+
+        function toggleSubscription() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                updateStatus(false);
+                return;
+            }
+
+            const topic = encodeURIComponent(document.getElementById('sub-topic').value.trim());
+            const hubUrl = window.location.origin + '/.well-known/mercure?topic=' + topic;
+            const feed = document.getElementById('stream-feed');
+
+            if (eventCounter === 0) {
+                feed.innerHTML = '';
+            }
+
+            eventSource = new EventSource(hubUrl);
+
+            eventSource.onopen = () => {
+                updateStatus(true);
+            };
+
+            eventSource.onmessage = (e) => {
+                eventCounter++;
+                document.getElementById('event-count').innerText = `${eventCounter} Events`;
+
+                const time = new Date().toLocaleTimeString();
+                const card = document.createElement('div');
+                card.className = 'event-card';
+                card.innerHTML = `
+                    <div class="event-header">
+                        <span>Event ID: ${e.lastEventId || 'N/A'}</span>
+                        <span>${time}</span>
+                    </div>
+                    <div class="event-payload">${e.data}</div>
+                `;
+                feed.prepend(card);
+            };
+
+            eventSource.onerror = () => {
+                updateStatus(false);
+            };
+        }
+
+        function clearStream() {
+            document.getElementById('stream-feed').innerHTML = '<div style="color: var(--text-muted); text-align: center; margin-top: 5rem;">Feed cleared. Waiting for events...</div>';
+            eventCounter = 0;
+            document.getElementById('event-count').innerText = '0 Events';
+        }
+
+        async function publishEvent() {
+            const topic = document.getElementById('pub-topic').value.trim();
+            const data = document.getElementById('pub-data').value.trim();
+            if (!topic || !data) return;
+
+            const btn = document.getElementById('pub-btn');
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/mercure-test.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ topic: topic, message: data })
+                });
+
+                const res = await response.json();
+                if (!res.success) {
+                    alert('Publish failed: ' + (res.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Network error: ' + err.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            toggleSubscription();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+{
+    frankenphp
+    order mercure before respond
+}
+
+{$SERVER_NAME::80, :443, localhost} {
+    root * /app
+    encode zstd gzip
+
+    # Built-in Mercure Real-Time Hub
+    mercure {
+        publisher_jwt {$MERCURE_PUBLISHER_JWT_KEY:FrankenPHPMercurePublisherSecretKey2026Dev!}
+        subscriber_jwt {$MERCURE_SUBSCRIBER_JWT_KEY:FrankenPHPMercureSubscriberSecretKey2026Dev!}
+        cors_origins *
+        publish_origins *
+        anonymous
+        subscriptions
+    }
+
+    # Health Check Endpoint
+    @healthcheck path /healthz
+    handle @healthcheck {
+        respond "OK" 200
+    }
+
+    # Auto-detect modern PHP projects with a public/ directory (e.g. Laravel, Symfony)
+    @hasPublic {
+        not path */public*
+        path_regexp p ^/([^/]+)(/.*)?$
+        file {re.p.1}/public/index.php
+    }
+    rewrite @hasPublic /{re.p.1}/public{re.p.2}
+
+    # Standard FrankenPHP PHP server (drop-in files and folders)
+    php_server
+
+    # Static file fallback
+    file_server
+}
