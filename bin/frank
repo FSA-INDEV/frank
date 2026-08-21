@@ -139,7 +139,11 @@ cmd_status() {
 
 cmd_logs() {
     check_compose
-    dcompose logs "${@:- -f frankenphp}"
+    if [[ $# -eq 0 ]]; then
+        dcompose logs -f frankenphp
+    else
+        dcompose logs "$@"
+    fi
 }
 
 cmd_reload() {
