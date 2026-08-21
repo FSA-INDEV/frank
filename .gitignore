@@ -1,7 +1,27 @@
+# Environment and sensitive credentials
 .env
-caddy_data/
-caddy_config/
-vendor/
-node_modules/
+.env.backup
+.env.local
+
+# Docker & Caddy persistent data
+/caddy_data
+/caddy_config
+/.frankenphp
+
+# Composer & Node dependencies in root
+/vendor
+/node_modules
+
+# Logs and temporary files
 *.log
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Database dumps (except the default seed template)
+*.sql
+!/.database/init.sql
+
+# Private & User-dropped projects
+intranet-confidencial/
