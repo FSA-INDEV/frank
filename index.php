@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 // Helper function to scan /var/www for projects
 function getProjects(string $baseDir): array {
-    $ignored = ['.', '..', '.git', '.github', '.idea', '.vscode', '.frankenphp', 'vendor', 'node_modules', 'caddy_data', 'caddy_config'];
+    $ignored = ['.', '..', '.git', '.github', '.idea', '.vscode', '.frankenphp', '.database', 'vendor', 'node_modules', 'caddy_data', 'caddy_config', 'bin'];
     $projects = [];
     
     if (!is_dir($baseDir)) {
@@ -23,9 +23,9 @@ function getProjects(string $baseDir): array {
             $url = '/' . $entry . '/';
             
             if ($hasPublic) {
-                $type = 'mvc'; // Laravel / Symfony style
+                $type = 'mvc';
             } elseif ($hasIndex) {
-                $type = 'flat'; // Standard PHP / WordPress
+                $type = 'flat';
             }
             
             $projects[] = [
@@ -41,6 +41,28 @@ function getProjects(string $baseDir): array {
     
     usort($projects, fn($a, $b) => $b['modified'] <=> $a['modified']);
     return $projects;
+}
+
+// Database Health Check
+$dbStatus = false;
+$dbVersion = 'N/A';
+$dbUserCount = 0;
+try {
+    $host = getenv('DB_HOST') ?: 'database';
+    $port = getenv('DB_PORT') ?: '3306';
+    $db   = getenv('DB_DATABASE') ?: 'app_dev';
+    $user = getenv('DB_USERNAME') ?: 'dev';
+    $pass = getenv('DB_PASSWORD') ?: 'secret';
+    
+    $pdo = new PDO("mysql:host={$host};port={$port};dbname={$db};charset=utf8mb4", $user, $pass, [
+        PDO::ATTR_TIMEOUT => 2,
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+    ]);
+    $dbStatus = true;
+    $dbVersion = $pdo->query("SELECT VERSION()")->fetchColumn();
+    $dbUserCount = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
+} catch (\Throwable $e) {
+    $dbStatus = false;
 }
 
 $projects = getProjects(__DIR__);
@@ -318,11 +340,22 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
             color: #d1d5db;
         }
 
-        .empty-state {
-            text-align: center;
-            padding: 2.5rem 1rem;
-            color: var(--text-muted);
+        /* Database credentials box */
+        .cred-box {
+            background: #030712;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            margin-bottom: 1rem;
         }
+        .cred-row { display: flex; justify-content: space-between; }
+        .cred-key { color: var(--text-muted); }
+        .cred-val { color: #38bdf8; font-weight: 600; }
 
         /* Mercure Live Widget */
         .mercure-box {
@@ -448,16 +481,16 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
                 <div class="logo-badge">🐘</div>
                 <div>
                     <h1>FrankenPHP Developer Hub</h1>
-                    <p>High-Performance Drop-In PHP & Mercure Development Server</p>
+                    <p>High-Performance Drop-In PHP, MariaDB & Mercure Development Server</p>
                 </div>
             </div>
             <div class="header-actions">
                 <div class="badge badge-success">
                     <span class="dot"></span> Server Active (PHP <?= PHP_VERSION ?>)
                 </div>
-                <a href="http://localhost:8080" target="_blank" class="btn">🗄️ Adminer DB</a>
+                <a href="http://localhost:8080/?server=database&username=dev&db=app_dev" target="_blank" class="btn btn-primary">🗄️ Adminer DB</a>
                 <a href="/mercure-demo.html" target="_blank" class="btn">⚡ Mercure Hub</a>
-                <a href="/worker-demo/" class="btn">🚀 Worker Demo</a>
+                <a href="/demo-db/" class="btn">📦 DB Demo App</a>
             </div>
         </header>
 
@@ -499,33 +532,33 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
                 </div>
             </div>
 
-            <!-- Live Mercure SSE Tester -->
+            <!-- Database & Credentials Card -->
             <div class="card">
                 <div class="card-header">
                     <div class="card-title">
-                        <span>⚡</span>
-                        <span>Mercure Real-Time SSE Hub</span>
+                        <span>🗄️</span>
+                        <span>Database (MariaDB 11.4 / MySQL)</span>
                     </div>
-                    <span id="mercure-status" class="badge" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">Connecting...</span>
+                    <span class="badge" style="background: <?= $dbStatus ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)' ?>; color: <?= $dbStatus ? '#34d399' : '#f87171' ?>;">
+                        <?= $dbStatus ? '● Connected' : '● Disconnected' ?>
+                    </span>
                 </div>
 
-                <div class="mercure-box">
-                    <div class="form-group">
-                        <input id="mercure-topic" class="input" type="text" value="https://example.com/notifications" placeholder="Topic URI">
-                        <button id="mercure-reconnect-btn" class="btn" onclick="initMercure()">Reconnect</button>
-                    </div>
+                <div class="cred-box">
+                    <div class="cred-row"><span class="cred-key">Server (Inside Docker):</span> <span class="cred-val">database:3306</span></div>
+                    <div class="cred-row"><span class="cred-key">Host (From PC/DBeaver):</span> <span class="cred-val">localhost:3306</span></div>
+                    <div class="cred-row"><span class="cred-key">Database:</span> <span class="cred-val">app_dev</span></div>
+                    <div class="cred-row"><span class="cred-key">User / Password:</span> <span class="cred-val">dev / secret</span></div>
+                    <div class="cred-row"><span class="cred-key">Root Password:</span> <span class="cred-val">root</span></div>
+                </div>
 
-                    <div class="form-group">
-                        <input id="mercure-msg" class="input" type="text" placeholder="Type a message to publish in real-time..." value="Hello from FrankenPHP! 🐘">
-                        <button id="mercure-publish-btn" class="btn btn-primary" onclick="publishMercure()">Publish</button>
-                    </div>
-
-                    <div class="live-log" id="mercure-log">
-                        <div class="log-entry">
-                            <span class="log-time">[System]</span>
-                            <span class="log-msg" style="color: var(--text-muted);">Listening for real-time Server-Sent Events...</span>
-                        </div>
-                    </div>
+                <div style="display: flex; gap: 0.75rem;">
+                    <a href="http://localhost:8080/?server=database&username=dev&db=app_dev" target="_blank" class="btn btn-primary" style="flex: 1; justify-content: center;">
+                        ⚡ Launch Adminer GUI
+                    </a>
+                    <a href="/demo-db/" class="btn" style="flex: 1; justify-content: center;">
+                        📦 Open DB Demo App
+                    </a>
                 </div>
             </div>
         </div>
@@ -589,7 +622,7 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
                 </div>
                 <div class="ext-chips">
                     <?php 
-                    $priorityExts = ['redis', 'pdo_mysql', 'pdo_pgsql', 'pdo_sqlite', 'opcache', 'intl', 'zip', 'pcntl', 'apcu', 'bcmath', 'gd', 'xdebug', 'zstandard'];
+                    $priorityExts = ['pdo_mysql', 'pdo_pgsql', 'pdo_sqlite', 'redis', 'opcache', 'intl', 'zip', 'pcntl', 'apcu', 'bcmath', 'gd', 'xdebug'];
                     foreach ($extensions as $ext): 
                         $isHigh = in_array(strtolower($ext), $priorityExts, true);
                     ?>
@@ -600,89 +633,8 @@ $opcache = function_exists('opcache_get_status') ? @opcache_get_status() : false
         </div>
 
         <footer>
-            FrankenPHP Drop-In Development Server &bull; Powered by Caddy, PHP & Mercure &bull; <a href="/healthz" style="color: var(--primary); text-decoration: none;">Healthcheck: OK</a>
+            FrankenPHP Drop-In Development Server &bull; Powered by Caddy, PHP 8.5, MariaDB 11.4 & Mercure &bull; <a href="/healthz" style="color: var(--primary); text-decoration: none;">Healthcheck: OK</a>
         </footer>
     </div>
-
-    <script>
-        let eventSource = null;
-
-        function logEvent(text, color = '#38bdf8') {
-            const log = document.getElementById('mercure-log');
-            const now = new Date().toLocaleTimeString();
-            const div = document.createElement('div');
-            div.className = 'log-entry';
-            div.innerHTML = `<span class="log-time">[${now}]</span> <span class="log-msg" style="color: ${color};">${text}</span>`;
-            log.appendChild(div);
-            log.scrollTop = log.scrollHeight;
-        }
-
-        function initMercure() {
-            if (eventSource) {
-                eventSource.close();
-            }
-
-            const topic = encodeURIComponent(document.getElementById('mercure-topic').value.trim());
-            const hubUrl = window.location.origin + '/.well-known/mercure?topic=' + topic;
-            const statusBadge = document.getElementById('mercure-status');
-
-            statusBadge.innerText = 'Connecting...';
-            statusBadge.style.background = 'rgba(245, 158, 11, 0.15)';
-            statusBadge.style.color = '#fbbf24';
-
-            try {
-                eventSource = new EventSource(hubUrl);
-
-                eventSource.onopen = () => {
-                    statusBadge.innerText = 'SSE Connected';
-                    statusBadge.style.background = 'rgba(16, 185, 129, 0.15)';
-                    statusBadge.style.color = '#34d399';
-                    logEvent('Connected to Mercure Hub SSE stream.', '#34d399');
-                };
-
-                eventSource.onmessage = (e) => {
-                    logEvent(`Received: ${e.data}`, '#38bdf8');
-                };
-
-                eventSource.onerror = () => {
-                    statusBadge.innerText = 'Disconnected';
-                    statusBadge.style.background = 'rgba(239, 68, 68, 0.15)';
-                    statusBadge.style.color = '#f87171';
-                };
-            } catch (err) {
-                logEvent(`Connection error: ${err.message}`, '#f87171');
-            }
-        }
-
-        async function publishMercure() {
-            const topic = document.getElementById('mercure-topic').value.trim();
-            const msg = document.getElementById('mercure-msg').value.trim();
-            if (!msg) return;
-
-            const btn = document.getElementById('mercure-publish-btn');
-            btn.disabled = true;
-
-            try {
-                const response = await fetch('/mercure-test.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ topic: topic, message: msg })
-                });
-
-                const res = await response.json();
-                if (res.success) {
-                    logEvent(`Published: "${msg}" to [${topic}]`, '#a5b4fc');
-                } else {
-                    logEvent(`Publish Error: ${res.error || 'Failed'}`, '#f87171');
-                }
-            } catch (e) {
-                logEvent(`Network error: ${e.message}`, '#f87171');
-            } finally {
-                btn.disabled = false;
-            }
-        }
-
-        window.addEventListener('DOMContentLoaded', initMercure);
-    </script>
 </body>
 </html>

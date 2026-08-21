@@ -39,7 +39,7 @@ print_header() {
     echo "  ██╔══╝  ██╔══██╗██╔══██║██║╚██╗██║██╔═██╗ "
     echo "  ██║     ██║  ██║██║  ██║██║ ╚████║██║  ██╗"
     echo "  ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝"
-    echo -e "  ${MAGENTA}FrankenPHP Drop-In Dev Server & Mercure Hub${RESET}\n"
+    echo -e "  ${MAGENTA}FrankenPHP Drop-In Dev Server, MariaDB & Mercure Hub${RESET}\n"
 }
 
 check_compose() {
@@ -58,10 +58,10 @@ cmd_help() {
     echo -e "${BOLD}USAGE:${RESET}"
     echo -e "  frank <command> [arguments]\n"
     echo -e "${BOLD}CORE COMMANDS:${RESET}"
-    echo -e "  ${GREEN}start${RESET}, ${GREEN}up${RESET}              Start all services in background"
+    echo -e "  ${GREEN}start${RESET}, ${GREEN}up${RESET}              Start all services in background (FrankenPHP, MariaDB, Redis, Adminer)"
     echo -e "  ${YELLOW}stop${RESET}, ${YELLOW}down${RESET}            Stop all running services"
     echo -e "  ${CYAN}restart${RESET}               Restart all containers"
-    echo -e "  ${CYAN}status${RESET}                Show status of services and open ports"
+    echo -e "  ${CYAN}status${RESET}                Show status of services, database & open ports"
     echo -e "  ${CYAN}logs${RESET} [-f]             View/follow live server logs"
     echo -e "  ${CYAN}reload${RESET}                Hot-reload Caddyfile configuration without downtime"
     echo -e "  ${CYAN}bash${RESET}, ${CYAN}sh${RESET}                Open interactive shell inside FrankenPHP"
@@ -81,7 +81,8 @@ cmd_start() {
     docker compose up -d --build
     echo -e "${GREEN}✅ All services started successfully!${RESET}"
     echo -e "   🌐 Developer Hub:  ${CYAN}http://localhost${RESET}"
-    echo -e "   🗄️ Adminer DB:      ${CYAN}http://localhost:8080${RESET}"
+    echo -e "   🗄️ Adminer DB GUI: ${CYAN}http://localhost:8080/?server=database&username=dev&db=app_dev${RESET}"
+    echo -e "   📦 DB Demo App:    ${CYAN}http://localhost/demo-db/${RESET}"
     echo -e "   ⚡ Mercure Hub:     ${CYAN}http://localhost/mercure-demo.html${RESET}"
 }
 
@@ -112,7 +113,7 @@ cmd_status() {
     for dir in "${INSTALL_DIR}"/*/; do
         if [[ -d "$dir" ]]; then
             bname=$(basename "$dir")
-            if [[ "$bname" != "bin" && "$bname" != "html" && "$bname" != ".github" && "$bname" != "caddy_data" && "$bname" != "caddy_config" ]]; then
+            if [[ "$bname" != "bin" && "$bname" != "html" && "$bname" != ".github" && "$bname" != ".database" && "$bname" != "caddy_data" && "$bname" != "caddy_config" ]]; then
                 if [[ -f "${dir}public/index.php" ]]; then
                     echo -e "  🚀 ${BOLD}${bname}${RESET} -> ${CYAN}http://localhost/${bname}/${RESET} ${DIM}(MVC public/)${RESET}"
                 elif [[ -f "${dir}index.php" ]]; then
@@ -268,7 +269,15 @@ cmd_doctor() {
         echo -e "${RED}OFFLINE (Not responding on :80)${RESET}"
     fi
 
-    # 4. Mercure Hub
+    # 4. Database Server
+    echo -n "  • MariaDB Database (database:3306): "
+    if docker compose exec -T database mariadb-admin ping -u root -proot &> /dev/null; then
+        echo -e "${GREEN}ONLINE (DB: app_dev)${RESET}"
+    else
+        echo -e "${YELLOW}STANDBY / INITIALIZING${RESET}"
+    fi
+
+    # 5. Mercure Hub
     echo -n "  • Mercure Real-Time Hub: "
     if curl -s -I http://localhost/.well-known/mercure | grep -q "400\|200"; then
         echo -e "${GREEN}ACTIVE${RESET}"
@@ -276,20 +285,20 @@ cmd_doctor() {
         echo -e "${RED}INACTIVE${RESET}"
     fi
 
-    # 5. Adminer DB Manager
+    # 6. Adminer DB Manager
     echo -n "  • Adminer GUI (Port 8080): "
     if curl -s -f -I http://localhost:8080 &> /dev/null; then
-        echo -e "${GREEN}ONLINE${RESET}"
+        echo -e "${GREEN}ONLINE (Pre-configured: database)${RESET}"
     else
         echo -e "${YELLOW}STANDBY${RESET}"
     fi
 
-    # 6. Permissions
+    # 7. Permissions
     echo -n "  • Directory Permissions (${INSTALL_DIR}): "
     if [[ -w "${INSTALL_DIR}" ]]; then
         echo -e "${GREEN}WRITABLE${RESET}"
     else
-        echo -e "${YELLOW}READ-ONLY (Run chown for user)${RESET}"
+        echo -e "${YELLOW}READ-ONLY${RESET}"
     fi
 
     echo -e "\n${BOLD}Diagnostics Complete!${RESET}\n"
