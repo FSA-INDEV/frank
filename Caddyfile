@@ -31,26 +31,35 @@
     }
     rewrite @hasPublic /{re.p.1}/public{re.p.2}
 
-    # 2. Auto-detect SPA projects with an app/ directory (e.g. React/Vue frontend in app/)
+    # 2. Redirect root of SPA app/ subfolder projects: /project -> /project/app/
     @hasAppSpaRoot {
         path_regexp p ^/([^/]+)/?$
         file {re.p.1}/app/index.html
     }
     redir @hasAppSpaRoot /{re.p.1}/app/ 302
 
-    # 3. SPA Client-Side Routing for app/ subfolder (fallback non-file/non-dir routes to app/index.html, except .php files)
-    @appSpaFallback {
+    # 3. SPA Client-Side Routing for app/ subfolder (fallback non-file routes to app/index.html, except .php files)
+    @appSpaRoute {
         path_regexp p ^/([^/]+)/app/(.*)$
         not path *.php
         not file {path}
         file {re.p.1}/app/index.html
     }
-    rewrite @appSpaFallback /{re.p.1}/app/index.html
+    rewrite @appSpaRoute /{re.p.1}/app/index.html
 
-    # Standard FrankenPHP PHP server (drop-in files, folders and try_files)
-    php_server {
-        try_files {path} {path}/index.php {path}/index.html index.php
+    # 4. Root-level SPA projects (fallback non-file routes to index.html, except .php files)
+    @rootSpaRoute {
+        path_regexp p ^/([^/]+)/(.*)$
+        not path *.php
+        not path */app/*
+        not path */public/*
+        not file {path}
+        file {re.p.1}/index.html
     }
+    rewrite @rootSpaRoute /{re.p.1}/index.html
+
+    # Standard FrankenPHP PHP server (drop-in files and folders)
+    php_server
 
     # Static file fallback
     file_server
