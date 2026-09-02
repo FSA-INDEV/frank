@@ -46,7 +46,7 @@ RUN install-php-extensions xdebug
 COPY php.ini /usr/local/etc/php/conf.d/99-custom.ini
 
 # Default command
-CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile", "--watch"]
+CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
 
 # --- Production Stage ---
 FROM base AS prod

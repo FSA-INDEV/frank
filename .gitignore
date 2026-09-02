@@ -25,3 +25,4 @@ Thumbs.db
 
 # Private & User-dropped projects
 intranet-confidencial/
+.pnpm-store
